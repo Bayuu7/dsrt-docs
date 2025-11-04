@@ -1,0 +1,11 @@
+{
+  "name": "dsrt-docs",
+  "version": "1.0.0",
+  "description": "DSRT API Documentation generator using JSDoc",
+  "scripts": {
+    "docs": "jsdoc -c jsdoc.conf.json"
+  },
+  "devDependencies": {
+    "jsdoc": "^4.0.2"
+  }
+}
