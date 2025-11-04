@@ -1,29 +1,77 @@
 import { Object3D } from '../core/Object3D.js';
+import { Object3D } from '../core/Object3D.js';
 import { Euler } from '../math/Euler.js';
 
+/**
+ * DSRT Scene
+ * ----------
+ * Defines the root container for all renderable objects.
+ * Holds background, environment, fog, and pipeline configuration.
+ */
 class Scene extends Object3D {
 
   constructor() {
     super();
 
-    // Flag tipe DSRT
+    /**
+     * Type flag for DSRT.
+     * Replaces isScene → inScene.
+     */
     this.inScene = true;
+
+    /**
+     * Explicit type branding.
+     */
     this.type = "DSRT.Scene";
 
+    /**
+     * Background definition (Color or Texture).
+     */
     this.background = null;
+
+    /**
+     * Environment texture for PBR materials.
+     */
     this.environment = null;
+
+    /**
+     * Fog instance (Fog or FogExp2).
+     */
     this.fog = null;
 
+    /**
+     * Background blurriness factor [0..1].
+     */
     this.backgroundBlurriness = 0;
+
+    /**
+     * Background intensity multiplier.
+     */
     this.backgroundIntensity = 1;
+
+    /**
+     * Background rotation (Euler).
+     */
     this.backgroundRotation = new Euler();
 
+    /**
+     * Environment intensity multiplier.
+     */
     this.environmentIntensity = 1;
+
+    /**
+     * Environment rotation (Euler).
+     */
     this.environmentRotation = new Euler();
 
+    /**
+     * Override material for forced rendering.
+     */
     this.overrideMaterial = null;
 
-    // Hook DSRT DevTools
+    /**
+     * Hook DSRT DevTools.
+     */
     if (typeof window !== "undefined" && window["DSRT_DEVTOOLS"]) {
       window["DSRT_DEVTOOLS"].dispatchEvent(
         new CustomEvent("observe", { detail: this })
@@ -31,6 +79,9 @@ class Scene extends Object3D {
     }
   }
 
+  /**
+   * Copy values from another Scene.
+   */
   copy(source, recursive) {
     super.copy(source, recursive);
 
@@ -53,7 +104,7 @@ class Scene extends Object3D {
   }
 
   /**
-   * Serialize Scene ke schema DSRT
+   * Serialize Scene into DSRT JSON schema.
    */
   toJSON(meta) {
     const base = super.toJSON(meta);
