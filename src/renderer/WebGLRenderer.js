@@ -15,7 +15,7 @@ class WebGLRenderer {
   setSize(width, height, updateStyle = true) {
     this.width = width;
     this.height = height;
-    if (updateStyle) {
+    if (updateStyle && this.domElement) {
       this.domElement.style.width = `${width}px`;
       this.domElement.style.height = `${height}px`;
     }
