@@ -322,7 +322,22 @@ class Color {
   }
 }
 
-Color.NAMES = _colorKeywords;= ;{
+/**
+ * DSRT.Color
+ *
+ * Represents a color in the DSRT engine. Internally stored as linear RGB
+ * in the working color space. Provides multiple constructors, setters,
+ * getters, arithmetic operations, and serialization utilities.
+ *
+ * @class DSRTColor
+ */
+class DSRTColor {
+  // ... all methods unchanged, but class renamed
+}
+
+// Attach the full X11 color dictionary
+DSRTColor.NAMES = {
+  
  'aliceblue': 0xF0F8FF, 'antiquewhite': 0xFAEBD7, 'aqua': 0x00FFFF, 'aquamarine': 0x7FFFD4,
   'azure': 0xF0FFFF, 'beige': 0xF5F5DC, 'bisque': 0xFFE4C4, 'black': 0x000000,
   'blanchedalmond': 0xFFEBCD, 'blue': 0x0000FF, 'blueviolet': 0x8A2BE2, 'brown': 0xA52A2A,
@@ -362,4 +377,6 @@ Color.NAMES = _colorKeywords;= ;{
   'white': 0xFFFFFF, 'whitesmoke': 0xF5F5F5, 'yellow': 0xFFFF00, 'yellowgreen': 0x9ACD32
 };
 
-export { Color as DSRTColor };
+};
+
+export { DSRTColor };
