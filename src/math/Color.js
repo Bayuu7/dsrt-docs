@@ -377,6 +377,4 @@ DSRTColor.NAMES = {
   'white': 0xFFFFFF, 'whitesmoke': 0xF5F5F5, 'yellow': 0xFFFF00, 'yellowgreen': 0x9ACD32
 };
 
-};
-
 export { DSRTColor };
