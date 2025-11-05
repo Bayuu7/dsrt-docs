@@ -1,3 +1,21 @@
+import { clamp, euclideanModulo, lerp } from './MathUtils.js';
+import { ColorManagement, SRGBToLinear, LinearToSRGB } from './ColorManagement.js';
+import { SRGBColorSpace } from '../constants.js';
+import { warn } from '../utils.js';
+
+const _colorKeywords = { /* full X11 dictionary here */ };
+const _hslA = { h: 0, s: 0, l: 0 };
+const _hslB = { h: 0, s: 0, l: 0 };
+
+function hue2rgb(p, q, t) {
+  if (t < 0) t += 1;
+  if (t > 1) t -= 1;
+  if (t < 1 / 6) return p + (q - p) * 6 * t;
+  if (t < 1 / 2) return q;
+  if (t < 2 / 3) return p + (q - p) * 6 * (2 / 3 - t);
+  return p;
+}
+
 /**
  * DSRT.Color
  *
@@ -8,12 +26,6 @@
  * @class DSRT.Color
  */
 class Color {
-  /**
-   * Construct a new DSRT.Color.
-   * @param {(number|string|DSRT.Color)} [r] - Hex, CSS string, or DSRT.Color.
-   * @param {number} [g] - Green channel [0..1].
-   * @param {number} [b] - Blue channel [0..1].
-   */
   constructor(r, g, b) {
     this.isColor = true;
     this.type = 'DSRT.Color';
@@ -23,183 +35,268 @@ class Color {
     return this.set(r, g, b);
   }
 
-  /**
-   * Set this color from another color, hex, or CSS string.
-   * @param {(number|string|DSRT.Color)} r
-   * @param {number} [g]
-   * @param {number} [b]
-   * @returns {DSRT.Color}
-   */
-  set(r, g, b) { /* implementation */ }
+  set(r, g, b) {
+    if (g === undefined && b === undefined) {
+      if (r && r.isColor) {
+        return this.copy(r);
+      } else if (typeof r === 'number') {
+        return this.setHex(r);
+      } else if (typeof r === 'string') {
+        return this.setStyle(r);
+      }
+    } else {
+      return this.setRGB(r, g, b);
+    }
+    return this;
+  }
 
-  /** @param {number} s - Scalar value. @returns {DSRT.Color} */
-  setScalar(s) { /* implementation */ }
+  setScalar(s) {
+    this.r = this.g = this.b = s;
+    return this;
+  }
 
-  /** @param {number} hex - Hex value. @param {string} [colorSpace] @returns {DSRT.Color} */
-  setHex(hex, colorSpace = SRGBColorSpace) { /* implementation */ }
+  setHex(hex, colorSpace = SRGBColorSpace) {
+    hex = Math.floor(hex);
+    this.r = (hex >> 16 & 255) / 255;
+    this.g = (hex >> 8 & 255) / 255;
+    this.b = (hex & 255) / 255;
+    ColorManagement.colorSpaceToWorking(this, colorSpace);
+    return this;
+  }
 
-  /** @param {number} r @param {number} g @param {number} b @param {string} [colorSpace] @returns {DSRT.Color} */
-  setRGB(r, g, b, colorSpace = ColorManagement.workingColorSpace) { /* implementation */ }
+  setRGB(r, g, b, colorSpace = ColorManagement.workingColorSpace) {
+    this.r = r;
+    this.g = g;
+    this.b = b;
+    ColorManagement.colorSpaceToWorking(this, colorSpace);
+    return this;
+  }
 
-  /** @param {number} h @param {number} s @param {number} l @param {string} [colorSpace] @returns {DSRT.Color} */
-  setHSL(h, s, l, colorSpace = ColorManagement.workingColorSpace) { /* implementation */ }
+  setHSL(h, s, l, colorSpace = ColorManagement.workingColorSpace) {
+    h = euclideanModulo(h, 1);
+    s = clamp(s, 0, 1);
+    l = clamp(l, 0, 1);
 
-  /** @param {string} style - CSS string. @param {string} [colorSpace] @returns {DSRT.Color} */
-  setStyle(style, colorSpace = SRGBColorSpace) { /* implementation */ }
+    if (s === 0) {
+      this.r = this.g = this.b = l;
+    } else {
+      const p = l <= 0.5 ? l * (1 + s) : l + s - (l * s);
+      const q = (2 * l) - p;
+      this.r = hue2rgb(q, p, h + 1 / 3);
+      this.g = hue2rgb(q, p, h);
+      this.b = hue2rgb(q, p, h - 1 / 3);
+    }
+    ColorManagement.colorSpaceToWorking(this, colorSpace);
+    return this;
+  }
 
-  /** @param {string} style - X11 name. @param {string} [colorSpace] @returns {DSRT.Color} */
-  setColorName(style, colorSpace = SRGBColorSpace) { /* implementation */ }
+  setStyle(style, colorSpace = SRGBColorSpace) {
+    if (_colorKeywords[style.toLowerCase()]) {
+      return this.setHex(_colorKeywords[style.toLowerCase()], colorSpace);
+    }
+    warn('DSRT.Color: Unknown style ' + style);
+    return this;
+  }
 
-  /** @returns {DSRT.Color} */
-  clone() { return new Color(this.r, this.g, this.b); }
+  setColorName(style, colorSpace = SRGBColorSpace) {
+    const hex = _colorKeywords[style.toLowerCase()];
+    if (hex !== undefined) {
+      this.setHex(hex, colorSpace);
+    } else {
+      warn('DSRT.Color: Unknown color ' + style);
+    }
+    return this;
+  }
 
-  /** @param {DSRT.Color} color @returns {DSRT.Color} */
-  copy(color) { /* implementation */ }
+  clone() {
+    return new Color(this.r, this.g, this.b);
+  }
 
-  /** @param {DSRT.Color} color @returns {DSRT.Color} */
-  copySRGBToLinear(color) { /* implementation */ }
+  copy(color) {
+    this.r = color.r;
+    this.g = color.g;
+    this.b = color.b;
+    return this;
+  }
 
-  /** @param {DSRT.Color} color @returns {DSRT.Color} */
-  copyLinearToSRGB(color) { /* implementation */ }
+  copySRGBToLinear(color) {
+    this.r = SRGBToLinear(color.r);
+    this.g = SRGBToLinear(color.g);
+    this.b = SRGBToLinear(color.b);
+    return this;
+  }
 
-  /** @returns {DSRT.Color} */
-  convertSRGBToLinear() { /* implementation */ }
+  copyLinearToSRGB(color) {
+    this.r = LinearToSRGB(color.r);
+    this.g = LinearToSRGB(color.g);
+    this.b = LinearToSRGB(color.b);
+    return this;
+  }
 
-  /** @returns {DSRT.Color} */
-  convertLinearToSRGB() { /* implementation */ }
+  convertSRGBToLinear() {
+    return this.copySRGBToLinear(this);
+  }
 
-  /** @param {string} [colorSpace] @returns {number} */
-  getHex(colorSpace = SRGBColorSpace) { /* implementation */ }
+  convertLinearToSRGB() {
+    return this.copyLinearToSRGB(this);
+  }
 
-  /** @param {string} [colorSpace] @returns {string} */
-  getHexString(colorSpace = SRGBColorSpace) { /* implementation */ }
+  getHex(colorSpace = SRGBColorSpace) {
+    const r = clamp(this.r * 255, 0, 255);
+    const g = clamp(this.g * 255, 0, 255);
+    const b = clamp(this.b * 255, 0, 255);
+    return (Math.round(r) << 16) ^ (Math.round(g) << 8) ^ Math.round(b);
+  }
 
-  /** @param {Object} target @param {string} [colorSpace] @returns {Object} */
-  getHSL(target, colorSpace = ColorManagement.workingColorSpace) { /* implementation */ }
+  getHexString(colorSpace = SRGBColorSpace) {
+    return ('000000' + this.getHex(colorSpace).toString(16)).slice(-6);
+  }
 
-  /** @param {DSRT.Color} target @param {string} [colorSpace] @returns {DSRT.Color} */
-  getRGB(target, colorSpace = ColorManagement.workingColorSpace) { /* implementation */ }
+  getHSL(target, colorSpace = ColorManagement.workingColorSpace) {
+    const r = this.r, g = this.g, b = this.b;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h, s;
+    const l = (min + max) / 2;
+    if (min === max) {
+      h = 0; s = 0;
+    } else {
+      const d = max - min;
+      s = l <= 0.5 ? d / (max + min) : d / (2 - max - min);
+      switch (max) {
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        case b: h = (r - g) / d + 4; break;
+      }
+      h /= 6;
+    }
+    target.h = h; target.s = s; target.l = l;
+    return target;
+  }
 
-  /** @param {string} [colorSpace] @returns {string} */
-  getStyle(colorSpace = SRGBColorSpace) { /* implementation */ }
+  getRGB(target, colorSpace = ColorManagement.workingColorSpace) {
+    target.r = this.r;
+    target.g = this.g;
+    target.b = this.b;
+    return target;
+  }
 
-  /** @param {number} h @param {number} s @param {number} l @returns {DSRT.Color} */
-  offsetHSL(h, s, l) { /* implementation */ }
+  getStyle(colorSpace = SRGBColorSpace) {
+    return `rgb(${Math.round(this.r * 255)},${Math.round(this.g * 255)},${Math.round(this.b * 255)})`;
+  }
 
-  /** @param {DSRT.Color} color @returns {DSRT.Color} */
-  add(color) { /* implementation */ }
+  offsetHSL(h, s, l) {
+    this.getHSL(_hslA);
+    return this.setHSL(_hslA.h + h, _hslA.s + s, _hslA.l + l);
+  }
 
-    /**
-   * Add the RGB values of two colors and store the result in this instance.
-   * @param {DSRT.Color} c1 - First color.
-   * @param {DSRT.Color} c2 - Second color.
-   * @returns {DSRT.Color} Reference to this color.
-   */
-  addColors(c1, c2) { /* implementation */ }
+  add(color) {
+    this.r += color.r;
+    this.g += color.g;
+    this.b += color.b;
+    return this;
+  }
 
-  /**
-   * Add a scalar to all channels.
-   * @param {number} s - Scalar value.
-   * @returns {DSRT.Color}
-   */
-  addScalar(s) { /* implementation */ }
+  addColors(c1, c2) {
+    this.r = c1.r + c2.r;
+    this.g = c1.g + c2.g;
+    this.b = c1.b + c2.b;
+    return this;
+  }
 
-  /**
-   * Subtract another color (clamped at 0).
-   * @param {DSRT.Color} color
-   * @returns {DSRT.Color}
-   */
-  sub(color) { /* implementation */ }
+  addScalar(s) {
+    this.r += s;
+    this.g += s;
+    this.b += s;
+    return this;
+  }
 
-  /**
-   * Multiply by another color.
-   * @param {DSRT.Color} color
-   * @returns {DSRT.Color}
-   */
-  multiply(color) { /* implementation */ }
+  sub(color) {
+    this.r = Math.max(0, this.r - color.r);
+    this.g = Math.max(0, this.g - color.g);
+    this.b = Math.max(0, this.b - color.b);
+    return this;
+  }
 
-  /**
-   * Multiply by scalar.
-   * @param {number} s
-   * @returns {DSRT.Color}
-   */
-  multiplyScalar(s) { /* implementation */ }
+  multiply(color) {
+    this.r *= color.r;
+    this.g *= color.g;
+    this.b *= color.b;
+    return this;
+  }
 
-  /**
-   * Linearly interpolate towards another color.
-   * @param {DSRT.Color} color - Target color.
-   * @param {number} alpha - Interpolation factor [0..1].
-   * @returns {DSRT.Color}
-   */
-  lerp(color, alpha) { /* implementation */ }
+  multiplyScalar(s) {
+    this.r *= s;
+    this.g *= s;
+    this.b *= s;
+    return this;
+  }
 
-  /**
-   * Interpolate between two colors and store result.
-   * @param {DSRT.Color} c1
-   * @param {DSRT.Color} c2
-   * @param {number} alpha - Interpolation factor [0..1].
-   * @returns {DSRT.Color}
-   */
-  lerpColors(c1, c2, alpha) { /* implementation */ }
+  lerp(color, alpha) {
+    this.r += (color.r - this.r) * alpha;
+    this.g += (color.g - this.g) * alpha;
+    this.b += (color.b - this.b) * alpha;
+    return this;
+  }
 
-  /**
-   * Interpolate in HSL space towards another color.
-   * @param {DSRT.Color} color
-   * @param {number} alpha
-   * @returns {DSRT.Color}
-   */
-  lerpHSL(color, alpha) { /* implementation */ }
+    lerpColors(c1, c2, alpha) {
+    this.r = c1.r + (c2.r - c1.r) * alpha;
+    this.g = c1.g + (c2.g - c1.g) * alpha;
+    this.b = c1.b + (c2.b - c1.b) * alpha;
+    return this;
+  }
 
-  /**
-   * Set from a Vector3.
-   * @param {Vector3} v
-   * @returns {DSRT.Color}
-   */
-  setFromVector3(v) { /* implementation */ }
+  lerpHSL(color, alpha) {
+    this.getHSL(_hslA);
+    color.getHSL(_hslB);
 
-  /**
-   * Apply a 3x3 matrix transform.
-   * @param {Matrix3} m
-   * @returns {DSRT.Color}
-   */
-  applyMatrix3(m) { /* implementation */ }
+    const h = lerp(_hslA.h, _hslB.h, alpha);
+    const s = lerp(_hslA.s, _hslB.s, alpha);
+    const l = lerp(_hslA.l, _hslB.l, alpha);
 
-  /**
-   * Test equality with another color.
-   * @param {DSRT.Color} c
-   * @returns {boolean}
-   */
-  equals(c) { /* implementation */ }
+    return this.setHSL(h, s, l);
+  }
 
-  /**
-   * Load from array.
-   * @param {Array<number>} arr
-   * @param {number} [offset=0]
-   * @returns {DSRT.Color}
-   */
-  fromArray(arr, offset = 0) { /* implementation */ }
+  setFromVector3(v) {
+    this.r = v.x;
+    this.g = v.y;
+    this.b = v.z;
+    return this;
+  }
 
-  /**
-   * Write to array.
-   * @param {Array<number>} [arr=[]]
-   * @param {number} [offset=0]
-   * @returns {Array<number>}
-   */
-  toArray(arr = [], offset = 0) { /* implementation */ }
+  applyMatrix3(m) {
+    const r = this.r, g = this.g, b = this.b;
+    const e = m.elements;
+    this.r = e[0] * r + e[3] * g + e[6] * b;
+    this.g = e[1] * r + e[4] * g + e[7] * b;
+    this.b = e[2] * r + e[5] * g + e[8] * b;
+    return this;
+  }
 
-  /**
-   * Load from buffer attribute.
-   * @param {BufferAttribute} attr
-   * @param {number} index
-   * @returns {DSRT.Color}
-   */
-  fromBufferAttribute(attr, index) { /* implementation */ }
+  equals(c) {
+    return (c.r === this.r) && (c.g === this.g) && (c.b === this.b);
+  }
 
-  /**
-   * Serialize to DSRT JSON schema.
-   * @param {string} [colorSpace=SRGBColorSpace]
-   * @returns {Object}
-   */
+  fromArray(arr, offset = 0) {
+    this.r = arr[offset];
+    this.g = arr[offset + 1];
+    this.b = arr[offset + 2];
+    return this;
+  }
+
+  toArray(arr = [], offset = 0) {
+    arr[offset] = this.r;
+    arr[offset + 1] = this.g;
+    arr[offset + 2] = this.b;
+    return arr;
+  }
+
+  fromBufferAttribute(attr, index) {
+    this.r = attr.getX(index);
+    this.g = attr.getY(index);
+    this.b = attr.getZ(index);
+    return this;
+  }
+
   toJSON(colorSpace = SRGBColorSpace) {
     return {
       type: 'DSRT.Color',
@@ -211,11 +308,6 @@ class Color {
     };
   }
 
-  /**
-   * Load from DSRT JSON schema.
-   * @param {Object} json
-   * @returns {DSRT.Color}
-   */
   fromJSON(json) {
     if (json && json.hex !== undefined) {
       this.setHex(json.hex, json.colorSpace || SRGBColorSpace);
@@ -223,10 +315,6 @@ class Color {
     return this;
   }
 
-  /**
-   * Iterate over [r,g,b].
-   * @yields {number}
-   */
   *[Symbol.iterator]() {
     yield this.r;
     yield this.g;
@@ -234,5 +322,44 @@ class Color {
   }
 }
 
-Color.NAMES = _colorKeywords;
+Color.NAMES = _colorKeywords;= ;{
+ 'aliceblue': 0xF0F8FF, 'antiquewhite': 0xFAEBD7, 'aqua': 0x00FFFF, 'aquamarine': 0x7FFFD4,
+  'azure': 0xF0FFFF, 'beige': 0xF5F5DC, 'bisque': 0xFFE4C4, 'black': 0x000000,
+  'blanchedalmond': 0xFFEBCD, 'blue': 0x0000FF, 'blueviolet': 0x8A2BE2, 'brown': 0xA52A2A,
+  'burlywood': 0xDEB887, 'cadetblue': 0x5F9EA0, 'chartreuse': 0x7FFF00, 'chocolate': 0xD2691E,
+  'coral': 0xFF7F50, 'cornflowerblue': 0x6495ED, 'cornsilk': 0xFFF8DC, 'crimson': 0xDC143C,
+  'cyan': 0x00FFFF, 'darkblue': 0x00008B, 'darkcyan': 0x008B8B, 'darkgoldenrod': 0xB8860B,
+  'darkgray': 0xA9A9A9, 'darkgreen': 0x006400, 'darkgrey': 0xA9A9A9, 'darkkhaki': 0xBDB76B,
+  'darkmagenta': 0x8B008B, 'darkolivegreen': 0x556B2F, 'darkorange': 0xFF8C00, 'darkorchid': 0x9932CC,
+  'darkred': 0x8B0000, 'darksalmon': 0xE9967A, 'darkseagreen': 0x8FBC8F, 'darkslateblue': 0x483D8B,
+  'darkslategray': 0x2F4F4F, 'darkslategrey': 0x2F4F4F, 'darkturquoise': 0x00CED1, 'darkviolet': 0x9400D3,
+  'deeppink': 0xFF1493, 'deepskyblue': 0x00BFFF, 'dimgray': 0x696969, 'dimgrey': 0x696969,
+  'dodgerblue': 0x1E90FF, 'firebrick': 0xB22222, 'floralwhite': 0xFFFAF0, 'forestgreen': 0x228B22,
+  'fuchsia': 0xFF00FF, 'gainsboro': 0xDCDCDC, 'ghostwhite': 0xF8F8FF, 'gold': 0xFFD700,
+  'goldenrod': 0xDAA520, 'gray': 0x808080, 'green': 0x008000, 'greenyellow': 0xADFF2F,
+  'grey': 0x808080, 'honeydew': 0xF0FFF0, 'hotpink': 0xFF69B4, 'indianred': 0xCD5C5C,
+  'indigo': 0x4B0082, 'ivory': 0xFFFFF0, 'khaki': 0xF0E68C, 'lavender': 0xE6E6FA,
+  'lavenderblush': 0xFFF0F5, 'lawngreen': 0x7CFC00, 'lemonchiffon': 0xFFFACD, 'lightblue': 0xADD8E6,
+  'lightcoral': 0xF08080, 'lightcyan': 0xE0FFFF, 'lightgoldenrodyellow': 0xFAFAD2, 'lightgray': 0xD3D3D3,
+  'lightgreen': 0x90EE90, 'lightgrey': 0xD3D3D3, 'lightpink': 0xFFB6C1, 'lightsalmon': 0xFFA07A,
+  'lightseagreen': 0x20B2AA, 'lightskyblue': 0x87CEFA, 'lightslategray': 0x778899, 'lightslategrey': 0x778899,
+  'lightsteelblue': 0xB0C4DE, 'lightyellow': 0xFFFFE0, 'lime': 0x00FF00, 'limegreen': 0x32CD32,
+  'linen': 0xFAF0E6, 'magenta': 0xFF00FF, 'maroon': 0x800000, 'mediumaquamarine': 0x66CDAA,
+  'mediumblue': 0x0000CD, 'mediumorchid': 0xBA55D3, 'mediumpurple': 0x9370DB, 'mediumseagreen': 0x3CB371,
+  'mediumslateblue': 0x7B68EE, 'mediumspringgreen': 0x00FA9A, 'mediumturquoise': 0x48D1CC, 'mediumvioletred': 0xC71585,
+  'midnightblue': 0x191970, 'mintcream': 0xF5FFFA, 'mistyrose': 0xFFE4E1, 'moccasin': 0xFFE4B5,
+  'navajowhite': 0xFFDEAD, 'navy': 0x000080, 'oldlace': 0xFDF5E6, 'olive': 0x808000,
+  'olivedrab': 0x6B8E23, 'orange': 0xFFA500, 'orangered': 0xFF4500, 'orchid': 0xDA70D6,
+  'palegoldenrod': 0xEEE8AA, 'palegreen': 0x98FB98, 'paleturquoise': 0xAFEEEE, 'palevioletred': 0xDB7093,
+  'papayawhip': 0xFFEFD5, 'peachpuff': 0xFFDAB9, 'peru': 0xCD853F, 'pink': 0xFFC0CB,
+  'plum': 0xDDA0DD, 'powderblue': 0xB0E0E6, 'purple': 0x800080, 'rebeccapurple': 0x663399,
+  'red': 0xFF0000, 'rosybrown': 0xBC8F8F, 'royalblue': 0x4169E1, 'saddlebrown': 0x8B4513,
+  'salmon': 0xFA8072, 'sandybrown': 0xF4A460, 'seagreen': 0x2E8B57, 'seashell': 0xFFF5EE,
+  'sienna': 0xA0522D, 'silver': 0xC0C0C0, 'skyblue': 0x87CEEB, 'slateblue': 0x6A5ACD,
+  'slategray': 0x708090, 'slategrey': 0x708090, 'snow': 0xFFFAFA, 'springgreen': 0x00FF7F,
+  'steelblue': 0x4682B4, 'tan': 0xD2B48C, 'teal': 0x008080, 'thistle': 0xD8BFD8,
+  'tomato': 0xFF6347, 'turquoise': 0x40E0D0, 'violet': 0xEE82EE, 'wheat': 0xF5DEB3,
+  'white': 0xFFFFFF, 'whitesmoke': 0xF5F5F5, 'yellow': 0xFFFF00, 'yellowgreen': 0x9ACD32
+};
+
 export { Color as DSRTColor };
