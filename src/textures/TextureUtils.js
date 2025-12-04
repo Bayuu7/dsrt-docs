@@ -1,6 +1,6 @@
 /**
  * DSRT Graphics Engine - Texture Utilities
- * @module DSRT/src/textures/TextureUtils.js
+ * @module dsrt-docs/src/textures/TextureUtils.js
  * @version 1.0.0
  * @license MIT
  * @copyright DSRT Engine Team
