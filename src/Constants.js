@@ -1,6 +1,6 @@
 /**
  * DSRT Graphics Engine Constants
- * @module Constants
+ * @module dsrt-docs/src/Constants.js
  */
 
 /**
